@@ -2,7 +2,7 @@
 title: Control system — Systemcore and WPILib 2027
 status: stub
 date: 2026-11-27
-source: WPILib "New for 2027" changelog (through 2027 Alpha 8), "Removed features", 2027 DataLogManager API docs and "Downloading & Processing Data Logs", all read 2026-11-27
+source: WPILib "New for 2027" changelog (through 2027 Alpha 8), "Removed features", "Systemcore Introduction", the brownout page, 2027 DataLogManager API docs, "Downloading & Processing Data Logs", and the wpilibsuite and REV SystemcoreTesting repos, all read 2026-11-27
 superseded_by:
 ---
 
@@ -36,6 +36,30 @@ All teams use Systemcore (replacing the roboRIO) for 2027.
 - Systemcore is configured through a web interface, with no team-number setter tool.
 - **Driver Station:** the new 2027 FIRST Driver Station is multi-platform (Alpha 6). A `DriverStationDisplay` text display is added.
 
+## Systemcore hardware and access
+
+From the Systemcore Introduction page:
+- **Compute:** a Raspberry Pi Compute Module 5 (CM5), quad-core ARM Cortex-A76, with a Raspberry Pi RP2350 handling I/O.
+- **Ports:** built-in CAN, I2C, USB and Ethernet, plus reconfigurable I/O for PWM, digital I/O and analog input.
+- **Onboard:** LEDs, a display and an IMU.
+- The only stage marker on the page is its linked spec sheet, named as the June 15, 2025 alpha.
+
+From the alpha/beta testing repos (wpilibsuite/SystemcoreTesting and REVrobotics/SystemCoreTesting). These are testing notes, so confirm them on real hardware:
+- **CAN buses:** five, with interface names `can_s0` to `can_s4`. There's also a separate "Enabling CANivore Support" step.
+- **USB storage** mounts at `/U`, `/V`, and so on. Combined with DataLogManager's "logs folder on the USB drive", logs on a stick likely land at `/U/logs`.
+- **Login:** default user and password `systemcore` / `systemcore`, the same as the log-download page says.
+- **Web interface** at `http://robot.local`, where the team number is set. It also installs packages such as Elastic and AdvantageScope Lite.
+- **Addresses:**
+  - the built-in Wi-Fi access point is 172.30.0.1
+  - over USB, 172.28.0.1 on Windows and 172.29.0.1 on Linux/Mac
+- **Port labels:** alpha units had none.
+
+**Brownouts:** WPILib's brownout page sits under the Systemcore section, but it still describes only the roboRIO, so Systemcore's thresholds and stages aren't documented yet. For comparison:
+- roboRIO 2.0 defaults to a 6.75 V Stage 2, settable with `setBrownoutVoltage`.
+- In Stage 2 the roboRIO disables user rails and PWM, and sends CAN motor controllers an explicit disable.
+
+The changelog says Alpha 7 "updated hardware support (brownout…)". Our 2026 health monitor deliberately left `setBrownoutVoltage(6.5)` alone, so re-check this before carrying it over.
+
 ## Logs: where they live and how to get them
 
 - **Location:** `DataLogManager` saves to a `logs` folder on a USB flash drive if one is attached, otherwise to `/home/systemcore/logs` on internal flash. If logs go to internal flash, download and delete them periodically so storage doesn't fill.
@@ -51,17 +75,19 @@ All teams use Systemcore (replacing the roboRIO) for 2027.
 
 | Tool | Impact | Action |
 |---|---|---|
-| Pitwall log fetch | SFTP still works, but the host and credentials change from the roboRIO to Systemcore (`systemcore` user). Log paths change: USB `logs/` or `/home/systemcore/logs`. | Update Pitwall's fetch settings; keep it read-only on the robot. |
+| Pitwall log fetch | SFTP still works, but the host and credentials change from the roboRIO to Systemcore (`systemcore` user; `robot.local` or the team address). Log paths change: likely `/U/logs` on a USB stick, or `/home/systemcore/logs`. | Update Pitwall's fetch settings, confirm the paths on a real unit, keep it read-only on the robot. |
 | Pitwall match identification | The `FMSInfo` table was renamed `DriverStation`, and the DS classes were split, so match keys in logs may move. | Re-map in each robot profile once real 2027 logs exist. |
 | `scripts/wpilog_reader.py` | File timestamps stay in microseconds, so the format itself looks unchanged. | Validate on the first real Systemcore log. |
 | AdvantageKit-based logging | Depends on AdvantageKit's 2027 release. SmartDashboard/Sendable removal and the package rename touch dashboards and choosers. | Check AdvantageKit 2027 notes before build season; see `knowledge/logging.md`. |
-| CAN analysis and health monitor | Multiple buses; device classes take `CANPort`. | Make CAN checks per bus (`knowledge/logging.md` §5). |
+| CAN analysis and health monitor | Five buses (`can_s0`–`can_s4`); device classes take `CANPort`. Brownout behavior isn't documented yet. | Make CAN checks per bus (`knowledge/logging.md` §5); re-check the brownout fault and the 12.3 V low-battery threshold. |
 | Turret / angle math | `Rotation2d` getters now wrap. | Check any code or analysis that unwraps angles. |
 
 ## To check at kickoff
 
 - The final release's notes, against everything above.
 - Whether Systemcore has a data-capable power distribution option, and how it's logged.
+- Systemcore's brownout thresholds and what it disables, once documented.
+- CAN bus count and names, USB mount paths and network addresses on a production unit, not alpha notes.
 - AdvantageKit's 2027 release: Systemcore support, log naming, metadata, `LoggedNetworkString`.
 - Phoenix 6 for 2027: CAN bus naming on Systemcore, and whether `optimizeBusUtilization` behaves the same.
 - Where the new Driver Station keeps its own logs.
@@ -74,5 +100,8 @@ All teams use Systemcore (replacing the roboRIO) for 2027.
 - Tunables migration from 2026: https://github.com/wpilibsuite/allwpilib/blob/main/tunables/doc/tunables.md#migration-from-wpilib-2026
 - Commands v3 migration: https://docs.wpilib.org/en/latest/docs/software/commandbased/commands-v3/migration-guide.html
 - Systemcore introduction: https://docs.wpilib.org/en/latest/docs/software/systemcore-info/systemcore-introduction.html
+- Brownouts (still roboRIO content): https://docs.wpilib.org/en/latest/docs/software/systemcore-info/roborio-brownouts.html
+- WPILib Systemcore testing notes: https://github.com/wpilibsuite/SystemcoreTesting
+- REV Systemcore testing notes: https://github.com/REVrobotics/SystemCoreTesting
 - Downloading data logs (2027): https://docs.wpilib.org/en/2027/docs/software/telemetry/datalog-download.html
 - DataLogManager (2027 Java API): https://github.wpilib.org/allwpilib/docs/2027/java/org/wpilib/system/DataLogManager.html
