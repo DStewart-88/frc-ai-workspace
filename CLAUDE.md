@@ -24,12 +24,24 @@ Every doc starts with frontmatter:
 ```yaml
 ---
 title:
-status: current   # current | applied | tabled | superseded | stub
+status: current   # see the status list below
 date: YYYY-MM-DD
 source:           # log file + match, or repo @ commit
 superseded_by:
 ---
 ```
+
+Status values:
+- `current`: a living doc that's up to date
+- `stub`: placeholder, still to fill
+- `proposed`: recommended, no decision yet
+- `decided`: agreed, not yet shipped
+- `applied`: shipped (say where, with a commit if possible)
+- `tabled`: deliberately set aside
+- `superseded`: replaced (fill `superseded_by`)
+- `reference`: guide, spec or tool doc with no decision attached
+
+Move an analysis from `decided` to `applied` only with evidence that it shipped.
 
 - Every number names its source (log file and match, or a commit).
 - One subject per file; keep files short.

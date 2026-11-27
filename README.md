@@ -22,9 +22,13 @@ Both read the same files, so neither has to remember what the other did.
 
 `INDEX.md` lists every doc with its status. Start there.
 
+## Syncing into the 2027 Project
+
+Exclude `archive/` from the Project's GitHub sync. Old docs otherwise come up in searches ahead of current ones. Claude Code can still read the archive on demand.
+
 ## Conventions
 
-- Each doc starts with a small header: title, status (`current`, `applied`, `tabled`, `superseded`, `stub`), date, and source.
+- Each doc starts with a small header: title, status, date and source. The status values are listed in `CLAUDE.md`.
 - Numbers name their source: a log file and match, or a commit.
 - Logs and other large files live on Drive, not here.
 - Students are referred to by role only.

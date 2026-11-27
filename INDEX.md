@@ -13,12 +13,25 @@ One line per doc. Update in the same commit as any doc that's added or changes s
 
 | Doc | Status | What it is |
 |---|---|---|
-| `knowledge/team.md` | stub | Team roles, standing rules, how results are framed for the team |
-| `knowledge/decisions.md` | stub | Dated decision log |
-| `knowledge/control-system.md` | stub | Systemcore / WPILib 2027 notes and links |
-| `knowledge/logging.md` | stub | Logging contract: what's logged, under which keys |
+| `knowledge/team.md` | current | Team rules, robot-code norms, practice habits that skew data, how results are framed for the team |
+| `knowledge/decisions.md` | current | Dated decision log, with the 2026 decisions that carry over and whether each one shipped |
+| `knowledge/control-system.md` | stub | Systemcore / WPILib 2027 changes confirmed so far, and what to check in our tools |
+| `knowledge/logging.md` | stub | Logging contract; lists the 2026 logging gaps to close |
 | `knowledge/robot-2027.md` | stub | Motors by subsystem, CAN map, power distribution |
 | `knowledge/game-2027.md` | stub | Added at kickoff: match periods, scoring, electrical rules |
+
+## Lessons
+
+| Doc | Status | What it is |
+|---|---|---|
+| `lessons/lessons-2026.md` | current | 66 season-agnostic lessons from 2026, each with its source doc |
+| `lessons/2026-baselines.md` | current | 2026 measured numbers to compare the 2027 robot against |
+
+## Scripts
+
+| Doc | Status | What it is |
+|---|---|---|
+| `scripts/wpilog_reader.py` | reference | Dependency-free WPILOG / AdvantageKit reader (one of three copies; see `scripts/README.md`) |
 
 ## Analyses
 
@@ -26,12 +39,10 @@ None yet.
 
 ## Skills
 
-None yet.
-
-## Lessons
-
-None yet. Planned: `lessons/lessons-2026.md`, `lessons/2026-baselines.md`.
+None yet. First candidate: a subsystem power review.
 
 ## Archive
 
-None yet. Planned: `archive/2026/` with its own index.
+| Doc | Status | What it is |
+|---|---|---|
+| `archive/2026/INDEX.md` | current | All 56 docs from the 2026 Project, with a finding and status for each |

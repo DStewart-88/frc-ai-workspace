@@ -1,0 +1,685 @@
+diff --git a/src/main/java/frc/robot/Robot.java b/src/main/java/frc/robot/Robot.java
+index c63fc41..73cb880 100644
+--- a/src/main/java/frc/robot/Robot.java
++++ b/src/main/java/frc/robot/Robot.java
+@@ -105,6 +105,7 @@ public class Robot extends LoggedRobot {
+   /** This autonomous runs the autonomous command selected by your {@link RobotContainer} class. */
+   @Override
+   public void autonomousInit() {
++    m_robotContainer.shotCounterModeStart(true);
+     autonomousCommand = m_robotContainer.getAutonomousCommand();
+ 
+     // schedule the autonomous command (example)
+@@ -127,6 +128,7 @@ public class Robot extends LoggedRobot {
+     if (autonomousCommand != null) {
+       autonomousCommand.cancel();
+     }
++    m_robotContainer.shotCounterModeStart(false);
+     m_robotContainer.startTargeting();
+     m_robotContainer.stopShooting();
+     m_robotContainer.stopHood();
+diff --git a/src/main/java/frc/robot/RobotContainer.java b/src/main/java/frc/robot/RobotContainer.java
+index 26565a1..af54648 100644
+--- a/src/main/java/frc/robot/RobotContainer.java
++++ b/src/main/java/frc/robot/RobotContainer.java
+@@ -34,6 +34,7 @@ import frc.robot.subsystems.Hood;
+ import frc.robot.subsystems.HotTub;
+ import frc.robot.subsystems.Intake;
+ import frc.robot.subsystems.Shooter;
++import frc.robot.subsystems.ShotCounter;
+ import frc.robot.subsystems.Simulation;
+ import frc.robot.subsystems.Turret;
+ import frc.robot.subsystems.drive.Drive;
+@@ -73,6 +74,7 @@ public class RobotContainer {
+   private final Vision vision;
+   private final Simulation simulation;
+   private final Dashboard dashboard = new Dashboard();
++  private final ShotCounter shotCounter;
+   // private final Climber climber = new Climber();
+ 
+   private final AutoStartPositions autoStartPositions = new AutoStartPositions();
+@@ -179,6 +181,17 @@ public class RobotContainer {
+     hood = new Hood(trajectorySolver::getAngle);
+     shooter = new Shooter(trajectorySolver::getShootSpeed);
+     intake = new Intake(drive::getSpeed);
++    // Watch-only: counts balls from shooter speed dips. Constructed after the trajectory solver
++    // and shooter so its periodic() sees this loop's setpoint.
++    shotCounter =
++        new ShotCounter(
++            shooter::getVelocity,
++            trajectorySolver::getShootSpeed,
++            this::isShooting,
++            this::onTargetRobot,
++            trajectorySolver::getIsTargetingHub,
++            trajectorySolver::getIsFullField,
++            dashboard::getIsHubActive);
+ 
+     NamedCommands.registerCommand("Intake Out", intake.deployIntake());
+     NamedCommands.registerCommand("Intake In", intake.retractIntake());
+@@ -222,6 +235,11 @@ public class RobotContainer {
+     drive.setDefaultCommand(driveRebuiltSOMETHING());
+   }
+ 
++  /** Called from Robot at the start of autonomous and teleop. */
++  public void shotCounterModeStart(boolean autonomous) {
++    shotCounter.onModeStart(autonomous);
++  }
++
+   public void startTargeting() {
+     turret.justSetTargeting();
+   }
+diff --git a/src/main/java/frc/robot/subsystems/Shooter.java b/src/main/java/frc/robot/subsystems/Shooter.java
+index 1570502..98f1f47 100644
+--- a/src/main/java/frc/robot/subsystems/Shooter.java
++++ b/src/main/java/frc/robot/subsystems/Shooter.java
+@@ -152,7 +152,7 @@ public class Shooter extends SubsystemBase {
+   }
+ 
+   @AutoLogOutput
+-  private double getVelocity() {
++  public double getVelocity() {
+     return shooterMain.getVelocity().getValueAsDouble();
+   }
+ 
+diff --git a/src/main/java/frc/robot/subsystems/ShotCounter.java b/src/main/java/frc/robot/subsystems/ShotCounter.java
+new file mode 100644
+index 0000000..7264b02
+--- /dev/null
++++ b/src/main/java/frc/robot/subsystems/ShotCounter.java
+@@ -0,0 +1,247 @@
++package frc.robot.subsystems;
++
++import edu.wpi.first.wpilibj.DriverStation;
++import edu.wpi.first.wpilibj.Timer;
++import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
++import edu.wpi.first.wpilibj2.command.Command;
++import edu.wpi.first.wpilibj2.command.InstantCommand;
++import edu.wpi.first.wpilibj2.command.SubsystemBase;
++import frc.robot.util.ShotDetector;
++import frc.robot.util.preferenceconstants.DoublePreferenceConstant;
++import java.util.function.BooleanSupplier;
++import java.util.function.DoubleSupplier;
++import org.littletonrobotics.junction.Logger;
++
++/**
++ * Counts balls shot per match and sorts them into scoring shots and shuttle shots.
++ *
++ * <p>This is a watcher only. It owns no motors, no command ever requires it, and it changes nothing
++ * about how the robot behaves. It extends SubsystemBase only so that periodic() runs once per loop.
++ * Everything it needs comes in through suppliers from RobotContainer, so the other subsystems only
++ * had to expose two getters.
++ *
++ * <p>Each detected ball goes into exactly one bucket, decided by what the trajectory solver was
++ * aiming at when the ball left:
++ *
++ * <ul>
++ *   <li><b>Hub</b> (scoring): TrajectorySolver.getIsTargetingHub() is true.
++ *   <li><b>Shuttle, midfield</b>: aiming at a shuttle target from the neutral zone.
++ *   <li><b>Shuttle, full field</b>: aiming at a shuttle target from the opponent's zone
++ *       (TrajectorySolver.getIsFullField()). Split out because the shooter is commanded to 100 rps
++ *       there, which it can't reach, so these shots behave differently.
++ * </ul>
++ *
++ * <p>Hub shots fired while our hub is inactive are also counted separately (they score nothing).
++ *
++ * <p>Balls moved by pushing or by reversing the intake never pass through the shooter, so they are
++ * not counted. Shuttle counts are therefore "balls shuttled by the shooter", not all balls moved.
++ *
++ * <p>Counts reset when autonomous starts, or when teleop starts without an autonomous just before
++ * it (a practice enable), and from the "ShotCounter/Reset" dashboard button. A since-boot total
++ * that match resets don't touch is kept for the component-usage tracker (shooter wheel wear).
++ */
++public class ShotCounter extends SubsystemBase {
++  public static final int HUB = 0;
++  public static final int SHUTTLE_MID = 1;
++  public static final int SHUTTLE_FULL = 2;
++  private static final String[] CATEGORY_NAMES = {"Hub", "ShuttleMid", "ShuttleFull"};
++  private static final String[] KEY_SUFFIXES = {
++    "/Auto", "/Teleop", "/Total", "/FeedSeconds", "/TriggerSeconds", "/BPSFeed", "/BPSTrigger",
++    "/BPSFlow"
++  };
++  // Log keys built once, so periodic() doesn't create new strings every loop.
++  private static final String[][] KEYS = new String[3][KEY_SUFFIXES.length];
++
++  static {
++    for (int c = 0; c < 3; c++) {
++      for (int k = 0; k < KEY_SUFFIXES.length; k++) {
++        KEYS[c][k] = "ShotCounter/" + CATEGORY_NAMES[c] + KEY_SUFFIXES[k];
++      }
++    }
++  }
++
++  /** Two shots closer than this are part of the same burst, for the flow-rate number (s). */
++  private static final double BURST_GAP_SEC = 0.6;
++  /** A teleop enable within this long of autonomous ending is the same match (s). */
++  private static final double SAME_MATCH_GAP_SEC = 10.0;
++
++  // Tunable from the dashboard (saved on the roboRIO like the other preference constants).
++  // Lockout is the main calibration knob; see shot-counter doc.
++  private final DoublePreferenceConstant p_dipThreshold =
++      new DoublePreferenceConstant("ShotCounter/DipThreshold", 1.5);
++  private final DoublePreferenceConstant p_lockoutSec =
++      new DoublePreferenceConstant("ShotCounter/LockoutSec", 0.10);
++
++  private final ShotDetector.Config config = new ShotDetector.Config();
++  private final ShotDetector detector = new ShotDetector(config);
++
++  // Inputs
++  private final DoubleSupplier velocity;
++  private final DoubleSupplier setpoint;
++  private final BooleanSupplier shooterOn;
++  private final BooleanSupplier feederGateOpen;
++  private final BooleanSupplier targetingHub;
++  private final BooleanSupplier fullField;
++  private final BooleanSupplier hubActive;
++
++  // Per-match tallies, indexed [phase][category], phase 0 = auto, 1 = teleop.
++  private final int[][] shots = new int[2][3];
++  private final double[][] feedSec = new double[2][3]; // feeder gate open, by aim mode
++  private final double[][] triggerSec = new double[2][3]; // shoot command running, by aim mode
++  private final int[] burstIntervals = new int[3];
++  private final double[] burstSec = new double[3];
++  private int hubShotsWhileInactive = 0;
++  private int lastCategory = -1;
++  private double lastShotTimeForBurst = Double.NEGATIVE_INFINITY;
++  private int shotsSinceBoot = 0;
++
++  private double lastLoopTime = Double.NaN;
++  private double lastAutoEndTime = Double.NEGATIVE_INFINITY;
++  private boolean wasAuto = false;
++
++  public ShotCounter(
++      DoubleSupplier velocity,
++      DoubleSupplier setpoint,
++      BooleanSupplier shooterOn,
++      BooleanSupplier feederGateOpen,
++      BooleanSupplier targetingHub,
++      BooleanSupplier fullField,
++      BooleanSupplier hubActive) {
++    this.velocity = velocity;
++    this.setpoint = setpoint;
++    this.shooterOn = shooterOn;
++    this.feederGateOpen = feederGateOpen;
++    this.targetingHub = targetingHub;
++    this.fullField = fullField;
++    this.hubActive = hubActive;
++
++    SmartDashboard.putData("ShotCounter/Reset", resetCommand());
++  }
++
++  /** Call from Robot.autonomousInit() and Robot.teleopInit(). */
++  public void onModeStart(boolean autonomous) {
++    double now = Timer.getFPGATimestamp();
++    if (autonomous || now - lastAutoEndTime > SAME_MATCH_GAP_SEC) {
++      resetMatch();
++    }
++  }
++
++  public void resetMatch() {
++    for (int p = 0; p < 2; p++) {
++      for (int c = 0; c < 3; c++) {
++        shots[p][c] = 0;
++        feedSec[p][c] = 0.0;
++        triggerSec[p][c] = 0.0;
++      }
++    }
++    for (int c = 0; c < 3; c++) {
++      burstIntervals[c] = 0;
++      burstSec[c] = 0.0;
++    }
++    hubShotsWhileInactive = 0;
++    lastCategory = -1;
++    lastShotTimeForBurst = Double.NEGATIVE_INFINITY;
++    detector.reset();
++  }
++
++  public Command resetCommand() {
++    return new InstantCommand(this::resetMatch).ignoringDisable(true);
++  }
++
++  @Override
++  public void periodic() {
++    double now = Timer.getFPGATimestamp();
++    double dt = Double.isNaN(lastLoopTime) ? 0.0 : Math.min(now - lastLoopTime, 0.2);
++    lastLoopTime = now;
++
++    boolean enabled = DriverStation.isEnabled();
++    boolean auto = DriverStation.isAutonomous();
++    if (wasAuto && !(enabled && auto)) {
++      lastAutoEndTime = now;
++    }
++    wasAuto = enabled && auto;
++
++    config.dipThreshold = p_dipThreshold.getValue();
++    config.lockoutSec = p_lockoutSec.getValue();
++
++    boolean on = enabled && shooterOn.getAsBoolean();
++    boolean gate = on && feederGateOpen.getAsBoolean();
++    int phase = auto ? 0 : 1;
++    int category = currentCategory();
++
++    if (on) {
++      triggerSec[phase][category] += dt;
++    }
++    if (gate) {
++      feedSec[phase][category] += dt;
++    }
++
++    boolean shot =
++        detector.update(now, velocity.getAsDouble(), setpoint.getAsDouble(), on, gate);
++
++    if (shot) {
++      shots[phase][category]++;
++      shotsSinceBoot++;
++      if (category == HUB && !auto && !hubActive.getAsBoolean()) {
++        hubShotsWhileInactive++;
++      }
++      double gap = now - lastShotTimeForBurst;
++      if (category == lastCategory && gap < BURST_GAP_SEC) {
++        burstIntervals[category]++;
++        burstSec[category] += gap;
++      }
++      lastShotTimeForBurst = now;
++      lastCategory = category;
++    }
++
++    log(shot, category);
++  }
++
++  private int currentCategory() {
++    if (targetingHub.getAsBoolean()) {
++      return HUB;
++    }
++    return fullField.getAsBoolean() ? SHUTTLE_FULL : SHUTTLE_MID;
++  }
++
++  private void log(boolean shot, int category) {
++    Logger.recordOutput("ShotCounter/Shot", shot); // true on the loop a ball is detected
++    Logger.recordOutput("ShotCounter/Armed", detector.isArmed());
++    Logger.recordOutput("ShotCounter/TrackingError", detector.getLastError());
++    if (shot) {
++      Logger.recordOutput("ShotCounter/LastShotCategory", CATEGORY_NAMES[category]);
++      Logger.recordOutput("ShotCounter/LastDipDepth", detector.getLastDipDepth());
++    }
++
++    int total = 0;
++    for (int c = 0; c < 3; c++) {
++      int cShots = shots[0][c] + shots[1][c];
++      double cFeed = feedSec[0][c] + feedSec[1][c];
++      double cTrigger = triggerSec[0][c] + triggerSec[1][c];
++      total += cShots;
++      Logger.recordOutput(KEYS[c][0], shots[0][c]);
++      Logger.recordOutput(KEYS[c][1], shots[1][c]);
++      Logger.recordOutput(KEYS[c][2], cShots);
++      Logger.recordOutput(KEYS[c][3], cFeed);
++      Logger.recordOutput(KEYS[c][4], cTrigger);
++      // Balls per second of feeder-gate-open time (includes time with an empty hopper).
++      Logger.recordOutput(KEYS[c][5], cFeed > 1.0 ? cShots / cFeed : 0.0);
++      // Balls per second of shoot-button time (adds spin-up and aiming time).
++      Logger.recordOutput(KEYS[c][6], cTrigger > 1.0 ? cShots / cTrigger : 0.0);
++      // Rate while balls are actually flowing: shots inside bursts / burst duration.
++      Logger.recordOutput(KEYS[c][7], burstSec[c] > 0.5 ? burstIntervals[c] / burstSec[c] : 0.0);
++    }
++    Logger.recordOutput("ShotCounter/Total", total);
++    Logger.recordOutput("ShotCounter/HubWhileInactive", hubShotsWhileInactive);
++    Logger.recordOutput("ShotCounter/SinceBoot", shotsSinceBoot);
++  }
++
++  public int getMatchTotal(int category) {
++    return shots[0][category] + shots[1][category];
++  }
++
++  /** Shots since the code started. Resets on reboot; the usage tracker should persist it. */
++  public int getShotsSinceBoot() {
++    return shotsSinceBoot;
++  }
++}
+diff --git a/src/main/java/frc/robot/util/ShotDetector.java b/src/main/java/frc/robot/util/ShotDetector.java
+new file mode 100644
+index 0000000..f3ade62
+--- /dev/null
++++ b/src/main/java/frc/robot/util/ShotDetector.java
+@@ -0,0 +1,192 @@
++package frc.robot.util;
++
++/**
++ * Detects individual balls leaving the shooter from the flywheel's speed.
++ *
++ * <p>Each ball that passes through the shooter pulls energy out of the flywheel, so the measured
++ * speed drops sharply for about a tenth of a second and then the velocity loop pulls it back up.
++ * This class watches for those dips. It has no WPILib or hardware dependencies, so it can be unit
++ * tested on a laptop and its logic matches the offline Python tool (shot_counter.py) line for line.
++ *
++ * <p>The signal it watches is the tracking error, e = velocity - setpoint, not the raw velocity.
++ * When the robot drives toward or away from the target the setpoint moves, and the flywheel speed
++ * follows it; subtracting the setpoint keeps that motion from looking like a ball.
++ *
++ * <p>How a shot is counted, each loop:
++ *
++ * <ol>
++ *   <li>Only look while armed: the shooter is commanded on, the feeder gate is open (or closed for
++ *       less than {@code hangoverSec}, since balls already in the path still come out), and the
++ *       flywheel is above {@code minVelocity}.
++ *   <li>Keep the highest error seen over the last {@code windowSec}.
++ *   <li>If the error falls at least {@code dipThreshold} below that peak, count one shot, as
++ *       long as: the peak wasn't more than {@code overspeedMargin} above setpoint, the speed is
++ *       now at least {@code belowSetpoint} under setpoint, and the last shot was at least {@code
++ *       lockoutSec} ago. The first two rules reject a flywheel that is above its setpoint and
++ *       slowing back down to it (after the setpoint drops), which looks like a dip but isn't a
++ *       ball; a ball always pulls the flywheel below its setpoint.
++ *   <li>After counting, wait for the error to climb {@code rearmThreshold} back up from the
++ *       bottom of the dip before another shot can be counted. This stops one long dip from
++ *       counting twice.
++ * </ol>
++ */
++public class ShotDetector {
++  /** Tuning values. Defaults are the values validated against the 2026 match logs. */
++  public static class Config {
++    /** Drop below the recent peak that counts as a ball, in rotations per second (motor shaft). */
++    public double dipThreshold = 1.5;
++    /** Recovery from the bottom of a dip needed before the next ball can count (rps). */
++    public double rearmThreshold = 0.75;
++    /** Minimum time between two counted balls (s). The main calibration knob; see the doc. */
++    public double lockoutSec = 0.10;
++    /** Below this flywheel speed nothing is counted (rps). */
++    public double minVelocity = 10.0;
++    /** A peak more than this far above setpoint means the loop is braking, not a ball (rps). */
++    public double overspeedMargin = 2.0;
++    /** The dip must take the speed at least this far under setpoint (rps). */
++    public double belowSetpoint = 0.75;
++    /** Keep looking this long after the feeder gate closes, for balls already in the path (s). */
++    public double hangoverSec = 0.30;
++    /** How far back the peak is taken from (s). */
++    public double windowSec = 0.20;
++  }
++
++  private static final int BUFFER_SIZE = 32; // > windowSec / shortest loop period, with margin
++
++  private final Config config;
++
++  // Ring buffer of recent (time, error) samples for the rolling peak. Fixed arrays so the
++  // detector allocates nothing per loop.
++  private final double[] bufTime = new double[BUFFER_SIZE];
++  private final double[] bufError = new double[BUFFER_SIZE];
++  private int bufStart = 0;
++  private int bufCount = 0;
++
++  private boolean inDip = false;
++  private double trough = 0.0;
++  private double lastShotTime = Double.NEGATIVE_INFINITY;
++  private double lastGateOpenTime = Double.NEGATIVE_INFINITY;
++
++  // Exposed for logging and tuning.
++  private double lastError = 0.0;
++  private double lastDipDepth = 0.0;
++  private boolean armed = false;
++
++  public ShotDetector() {
++    this(new Config());
++  }
++
++  public ShotDetector(Config config) {
++    this.config = config;
++  }
++
++  /**
++   * Feed one loop's worth of data. Call exactly once per robot loop.
++   *
++   * @param timestampSec loop timestamp in seconds
++   * @param velocity measured flywheel velocity, rps (motor shaft)
++   * @param setpoint commanded flywheel velocity, rps (motor shaft)
++   * @param shooterOn true while the shoot command is running
++   * @param feederGateOpen true while the feeder is being told to feed
++   * @return true if a ball was detected on this loop
++   */
++  public boolean update(
++      double timestampSec,
++      double velocity,
++      double setpoint,
++      boolean shooterOn,
++      boolean feederGateOpen) {
++    if (feederGateOpen) {
++      lastGateOpenTime = timestampSec;
++    }
++
++    armed =
++        shooterOn
++            && (timestampSec - lastGateOpenTime) <= config.hangoverSec
++            && velocity > config.minVelocity;
++
++    if (!armed) {
++      clearBuffer();
++      inDip = false;
++      return false;
++    }
++
++    double error = velocity - setpoint;
++    lastError = error;
++
++    if (inDip) {
++      trough = Math.min(trough, error);
++      if (error - trough >= config.rearmThreshold) {
++        inDip = false;
++        clearBuffer();
++      } else {
++        return false;
++      }
++    }
++
++    // Drop samples older than the window, then take the peak of what's left.
++    while (bufCount > 0 && bufTime[bufStart] < timestampSec - config.windowSec) {
++      bufStart = (bufStart + 1) % BUFFER_SIZE;
++      bufCount--;
++    }
++    double peak = error;
++    for (int k = 0; k < bufCount; k++) {
++      peak = Math.max(peak, bufError[(bufStart + k) % BUFFER_SIZE]);
++    }
++    push(timestampSec, error);
++
++    if (peak - error >= config.dipThreshold
++        && peak <= config.overspeedMargin
++        && error <= -config.belowSetpoint
++        && timestampSec - lastShotTime >= config.lockoutSec) {
++      lastShotTime = timestampSec;
++      lastDipDepth = peak - error;
++      inDip = true;
++      trough = error;
++      return true;
++    }
++    return false;
++  }
++
++  /** Forget all history, e.g. at the start of a match. Does not touch any counts. */
++  public void reset() {
++    clearBuffer();
++    inDip = false;
++    lastShotTime = Double.NEGATIVE_INFINITY;
++    lastGateOpenTime = Double.NEGATIVE_INFINITY;
++  }
++
++  public boolean isArmed() {
++    return armed;
++  }
++
++  /** Tracking error (velocity - setpoint) seen on the last armed loop, rps. */
++  public double getLastError() {
++    return lastError;
++  }
++
++  /** Depth of the most recent counted dip, rps. Useful for checking the threshold has margin. */
++  public double getLastDipDepth() {
++    return lastDipDepth;
++  }
++
++  public double getLastShotTime() {
++    return lastShotTime;
++  }
++
++  private void push(double t, double e) {
++    if (bufCount == BUFFER_SIZE) { // full: overwrite the oldest
++      bufStart = (bufStart + 1) % BUFFER_SIZE;
++      bufCount--;
++    }
++    int idx = (bufStart + bufCount) % BUFFER_SIZE;
++    bufTime[idx] = t;
++    bufError[idx] = e;
++    bufCount++;
++  }
++
++  private void clearBuffer() {
++    bufStart = 0;
++    bufCount = 0;
++  }
++}
+diff --git a/src/main/java/frc/robot/util/TrajectorySolver.java b/src/main/java/frc/robot/util/TrajectorySolver.java
+index 6c2151d..09f3065 100644
+--- a/src/main/java/frc/robot/util/TrajectorySolver.java
++++ b/src/main/java/frc/robot/util/TrajectorySolver.java
+@@ -99,6 +99,12 @@ public class TrajectorySolver extends SubsystemBase {
+     return isTargetingHub;
+   }
+ 
++  /** True when aiming at a shuttle target from the opponent's zone (shooter commanded to 100). */
++  @AutoLogOutput
++  public boolean getIsFullField() {
++    return isFullField;
++  }
++
+   public double getSimTarget() {
+     return turretToProjectedTarget.getAngle().getDegrees();
+   }
+diff --git a/src/test/java/frc/robot/util/ShotDetectorTest.java b/src/test/java/frc/robot/util/ShotDetectorTest.java
+new file mode 100644
+index 0000000..c3628a6
+--- /dev/null
++++ b/src/test/java/frc/robot/util/ShotDetectorTest.java
+@@ -0,0 +1,128 @@
++package frc.robot.util;
++
++import static org.junit.jupiter.api.Assertions.assertEquals;
++import static org.junit.jupiter.api.Assertions.assertTrue;
++
++import java.util.Random;
++import org.junit.jupiter.api.Test;
++
++/**
++ * Checks ShotDetector against made-up flywheel traces. Run with ./gradlew test. These don't need a
++ * robot or a log file.
++ */
++public class ShotDetectorTest {
++  private static final double DT = 0.02; // 50 Hz robot loop
++  private static final double SETPOINT = 41.0; // typical hub shot, rps
++
++  /** Flywheel speed for a ball that hits at tHit: drops ~6 rps, recovers in ~0.1 s. */
++  private static double ballDip(double t, double tHit) {
++    double x = t - tHit;
++    if (x < 0 || x > 0.14) {
++      return 0.0;
++    }
++    return x < 0.04 ? -6.0 * (x / 0.04) : -6.0 * (1.0 - (x - 0.04) / 0.10);
++  }
++
++  private static int run(
++      double seconds, double[] ballTimes, boolean gate, double setpointRampPerSec, long seed) {
++    ShotDetector det = new ShotDetector();
++    Random noise = new Random(seed);
++    int count = 0;
++    for (double t = 0; t < seconds; t += DT) {
++      double sp = SETPOINT + setpointRampPerSec * t;
++      double v = sp + 0.3 * noise.nextGaussian(); // ~0.3 rps measurement noise
++      for (double tb : ballTimes) {
++        v += ballDip(t, tb);
++      }
++      if (det.update(t, v, sp, true, gate)) {
++        count++;
++      }
++    }
++    return count;
++  }
++
++  private static double[] evenlySpaced(int n, double start, double spacing) {
++    double[] out = new double[n];
++    for (int i = 0; i < n; i++) {
++      out[i] = start + i * spacing;
++    }
++    return out;
++  }
++
++  @Test
++  public void fewFalseCountsWithNoBalls() {
++    // 0.3 rps is the measured speed noise at a steady hold (Oct 8-9 practice logs). Noise alone
++    // occasionally makes a 1.5 rps dip; the real no-ball sessions showed about 1 count per 20 s,
++    // so allow up to 2 in 30 s here.
++    int falseCounts = run(30.0, new double[0], true, 0.0, 1);
++    assertTrue(falseCounts <= 2, "steady flywheel with noise gave " + falseCounts);
++  }
++
++  @Test
++  public void countsEachBall() {
++    double[] balls = evenlySpaced(20, 1.0, 0.25); // 4 balls per second
++    assertEquals(20, run(7.0, balls, true, 0.0, 2), "20 balls at 4 per second");
++  }
++
++  @Test
++  public void countsBallsWhileSetpointMoves() {
++    // Driving toward the hub at ~2 m/s moves the setpoint ~8 rps/s; that alone isn't a ball.
++    // (Kept to 3 s so the setpoint stays well above the 10 rps minimum.)
++    double[] balls = evenlySpaced(10, 0.4, 0.25);
++    assertEquals(10, run(3.0, balls, true, -8.0, 3), "setpoint ramping down");
++    assertTrue(run(3.0, new double[0], true, -8.0, 4) <= 1, "ramp with no balls");
++  }
++
++  @Test
++  public void setpointStepDownIsNotABall() {
++    ShotDetector det = new ShotDetector();
++    int count = 0;
++    double v = 55.0;
++    for (double t = 0; t < 3.0; t += DT) {
++      double sp = t < 1.0 ? 55.0 : 45.0; // aim target switches, setpoint drops 10 rps
++      v += (sp - v) * 0.15; // flywheel brakes toward the new setpoint
++      if (det.update(t, v, sp, true, true)) {
++        count++;
++      }
++    }
++    assertEquals(0, count, "flywheel braking after a setpoint drop");
++  }
++
++  @Test
++  public void coastingDownToNewSetpointIsNotABall() {
++    // Same as above but the flywheel slows at a coast-like 12 rps/s and stops at the setpoint.
++    ShotDetector det = new ShotDetector();
++    int count = 0;
++    double v = 55.0;
++    for (double t = 0; t < 3.0; t += DT) {
++      double sp = t < 1.0 ? 55.0 : 45.0;
++      v = Math.max(sp, v - 12.0 * DT);
++      if (det.update(t, v, sp, true, true)) {
++        count++;
++      }
++    }
++    assertEquals(0, count, "flywheel coasting down after a setpoint drop");
++  }
++
++  @Test
++  public void nothingCountedWithFeederClosed() {
++    double[] balls = evenlySpaced(5, 1.0, 0.3);
++    assertEquals(0, run(3.0, balls, false, 0.0, 5), "gate closed the whole time");
++  }
++
++  @Test
++  public void oneLongDipCountsOnce() {
++    ShotDetector det = new ShotDetector();
++    int count = 0;
++    for (double t = 0; t < 2.0; t += DT) {
++      double v = SETPOINT;
++      if (t > 1.0 && t < 1.4) {
++        v -= 8.0 * (t - 1.0) / 0.4; // slow 0.4 s sag with no recovery in between
++      }
++      if (det.update(t, v, SETPOINT, true, true)) {
++        count++;
++      }
++    }
++    assertEquals(1, count, "a single long sag");
++  }
++}

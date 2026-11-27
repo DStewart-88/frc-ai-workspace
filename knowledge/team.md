@@ -15,6 +15,11 @@ superseded_by:
 
 - Students may not touch the robot while it is enabled, in any mode.
 
+## Robot code
+
+- Robot code projects are side projects to the team's main robot goal. Keep robot code lean: no extra code or functions beyond what's needed, because robot resources are limited.
+- Analysis-only code (counters, diagnostics) should stay out of robot functions unless it earns its place.
+
 ## Practice habits that affect data
 
 - At practice, each battery is run until it's dead before swapping (saves swap and reboot time). Practice logs therefore see far more battery depletion than a typical match.
