@@ -8,6 +8,7 @@ One line per doc. Update in the same commit as any doc that's added or changes s
 |---|---|---|
 | `CLAUDE.md` | current | Rules every AI session follows |
 | `README.md` | current | What this repo is, for people |
+| `setup/2027-project.md` | current | Checklist for creating the 2027 claude.ai Project: instructions text, sync settings, memory setting |
 
 ## Knowledge
 
@@ -15,8 +16,8 @@ One line per doc. Update in the same commit as any doc that's added or changes s
 |---|---|---|
 | `knowledge/team.md` | current | Team rules, robot-code norms, practice habits that skew data, how results are framed for the team |
 | `knowledge/decisions.md` | current | Dated decision log, with the 2026 decisions that carry over and whether each one shipped |
-| `knowledge/control-system.md` | stub | Systemcore / WPILib 2027 changes confirmed so far, and what to check in our tools |
-| `knowledge/logging.md` | stub | Logging contract; lists the 2026 logging gaps to close |
+| `knowledge/control-system.md` | stub | Systemcore / WPILib 2027 changes as of Alpha 8, log locations and fetching, impact on our tools, what to check at kickoff |
+| `knowledge/logging.md` | proposed | Robot-agnostic logging contract: identity (gains, battery ID, run label), power, commanded vs measured, gates, loop timing, per-bus CAN |
 | `knowledge/robot-2027.md` | stub | Motors by subsystem, CAN map, power distribution |
 | `knowledge/game-2027.md` | stub | Added at kickoff: match periods, scoring, electrical rules |
 
@@ -39,7 +40,9 @@ None yet.
 
 ## Skills
 
-None yet. First candidate: a subsystem power review.
+| Doc | Status | What it is |
+|---|---|---|
+| `.claude/skills/subsystem-power-review/SKILL.md` | current | The 2026 log-based power review method, from scoping to a team-facing summary in amps |
 
 ## Archive
 
