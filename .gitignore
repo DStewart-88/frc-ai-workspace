@@ -1,0 +1,18 @@
+# Logs and large binaries live on Drive, not in git
+*.wpilog
+*.hoot
+*.revlog
+*.dslog
+*.dsevents
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
