@@ -22,6 +22,10 @@ Evidence: analyses/... or archive/2026/...
 
 Keep `Status` honest. In 2026 several decisions were agreed and never shipped, and nothing recorded the gap.
 
+## 2026-11-27 · 2027 claude.ai Project created
+Status: applied (by Doug, following setup/2027-project.md)
+Follow-ups: confirm the archive/ exclusion took effect; frc-pitwall has no docs/ folder yet, so its sync source is empty until one is added
+
 ## 2026-11-27 · Context repo lives in Doug's personal account; Claude commits freely
 Status: applied (DStewart-88/frc-ai-workspace)
 Why: the team is still working out how AI fits into students' workflow; Doug keeps control of access for now
