@@ -35,4 +35,4 @@ Exclude `archive/` from the Project's GitHub sync. Old docs otherwise come up in
 
 ## Ownership
 
-Private, in Doug's account, while the team works out how AI fits into students' workflow. May transfer to the `frc-88` organization later.
+Public, in Doug's account: anyone can read it, and Doug controls who can change it. It stays out of the `frc-88` organization while the team works out how AI fits into students' workflow, and may transfer there later.

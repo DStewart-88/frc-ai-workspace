@@ -22,6 +22,18 @@ Evidence: analyses/... or archive/2026/...
 
 Keep `Status` honest. In 2026 several decisions were agreed and never shipped, and nothing recorded the gap.
 
+## 2026-11-27 · The context repo stays public
+Status: applied (CLAUDE.md public-repo rule; README ownership section)
+Why: the aim of keeping it in Doug's account is control over who can change it; Doug has no concern about the contents being read. A pattern search of the files and history at d1fb96b found no student names or non-public passwords, and the three claude.ai links in the archive are owner-only.
+Rejected: making it private
+Evidence: 2027 Project chat, 2026-11-27
+
+## 2026-11-27 · Post-event log reviews are triggered by hand
+Status: decided
+Why: the machine has to be on with the logs, and event days don't end at a fixed time. Main machine: Framework 12 laptop (Fedora, unofficial Claude desktop app); no OS change needed.
+Rejected: recurring scheduled run (a one-off is fine when the laptop is known to be on)
+Evidence: 2027 Project chat, 2026-11-27
+
 ## 2026-11-27 · 2027 claude.ai Project created
 Status: applied (by Doug, following setup/2027-project.md)
 Follow-ups: confirm the archive/ exclusion took effect. frc-pitwall's docs/ was added the same day (82663e0), so that sync source now has content.

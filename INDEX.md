@@ -43,6 +43,8 @@ None yet.
 | Doc | Status | What it is |
 |---|---|---|
 | `.claude/skills/subsystem-power-review/SKILL.md` | current | The 2026 log-based power review method, from scoping to a team-facing summary in amps |
+| `.claude/skills/what-could-go-wrong/SKILL.md` | current | Pre-ship check of a change for bugs and side effects: verdict, risks, test plan |
+| `.claude/skills/post-event-log-review/SKILL.md` | current | Log review after an event or event day: Pitwall, standard sweep, anomalies, write-up in `analyses/` |
 
 ## Archive
 

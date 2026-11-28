@@ -72,3 +72,4 @@ Move an analysis from `decided` to `applied` only with evidence that it shipped.
 ## Privacy
 
 - Students are referred to by role only. No personal details about students in this repo.
+- **This repo is public.** Write every file and commit message as if students, parents and other teams will read it: no names of people other than Doug, no personal details, no passwords (published factory defaults are fine), no share links that open private files, and no judgments about individuals.
