@@ -24,7 +24,7 @@ Keep `Status` honest. In 2026 several decisions were agreed and never shipped, a
 
 ## 2026-11-27 · 2027 claude.ai Project created
 Status: applied (by Doug, following setup/2027-project.md)
-Follow-ups: confirm the archive/ exclusion took effect; frc-pitwall has no docs/ folder yet, so its sync source is empty until one is added
+Follow-ups: confirm the archive/ exclusion took effect. frc-pitwall's docs/ was added the same day (82663e0), so that sync source now has content.
 
 ## 2026-11-27 · Context repo lives in Doug's personal account; Claude commits freely
 Status: applied (DStewart-88/frc-ai-workspace)
@@ -226,6 +226,6 @@ Status: decided
 Why: open-ended practice questions are specific tests, better answered by giving logs to AI. Practice matches (Driver Station practice mode) get the same report and counting rules as events, one report per practice stretch between events, split by day.
 
 ## 2026-11-13 · Pitwall's 2027 status lives in `docs/` in the frc-pitwall repo
-Status: decided
+Status: applied (frc-pitwall 82663e0, Nov 27: docs/status.md with a 2027 readiness section)
 Why: syncs into the 2027 Project alongside this repo
 Evidence: log-processor-framework.md

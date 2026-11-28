@@ -116,6 +116,8 @@ These files are frozen. Don't edit them, and don't treat them as current. What c
 
 ## Pitwall
 
+These three now have living copies in `DStewart-88/frc-pitwall` under `docs/` (moved Nov 27, 2026). `log-processor-framework.md` became `docs/status.md`, with a 2027 readiness section. Use those copies; the ones here are frozen.
+
 | Doc | Date | Status | Finding, and what happened |
 |---|---|---|---|
 | `log-processor-framework.md` | 11-08 | applied | Pitwall's design, decision log and status: app, power/scoring/health modules and log fetch built through v0.9.0 (PR #23). Its 2027 status moves to `docs/` in the frc-pitwall repo. |
